@@ -30,13 +30,18 @@ q3_24_df = pd.read_table('/Users/sarahcernugel/uda-class-notes/calls/tko_q3_2024
 q3_23_df = pd.read_table('/Users/sarahcernugel/uda-class-notes/calls/edr_q3_2023.txt')
 q2_23_df = pd.read_table('/Users/sarahcernugel/uda-class-notes/calls/wwe_q2_2023.txt')
 
+wwe_calls = pd.DataFrame(data, columns=['ticker', 'quarter', 'year'])
 
 print(q1_23_df)
 print(q3_24_df)
 print(q3_23_df)
 print(q2_23_df)
 
-#read_table
+wwe_data = []
+
+wwe_calls = pd.DataFrame(data, columns=['ticker', 'quarter', 'year'])
+
+#str.split()
 
 ```
 
@@ -45,7 +50,23 @@ print(q2_23_df)
 Use the AlphaVantage api to get daily stock prices for WWE and related tickers for the last 5 years -- pay attention to your data. You cannot use any AlphaVantage packages (i.e., you can only use requests to grab the data). Tell me about the general trend that you are seeing. I don't care which viz package you use, but plotly is solid and plotnine is good for ggplot2 users.
 
 ```{python}
+# API Key WPP4DPSKZ7JJRC9L
 import requests 
+import plotly.express as px 
+
+url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=WPP4DPSKZ7JJRC9L'
+r = requests.get(url)
+data = r.json()
+
+print(data)
+
+df = px.data.iris() 
+
+# plotting the line chart
+fig = px.line(data, x="species", y="petal_width") 
+
+# showing the plot
+fig.show()
 
 ```
 
