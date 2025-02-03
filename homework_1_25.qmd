@@ -23,26 +23,28 @@ In the `calls` folder, you'll find 4 text files -- these are transcripts from qu
 import glob as glob
 import pandas as pd
 
-glob.glob("/Users/sarahcernugel/uda-class-notes/calls/*")
+def wwe_calls():
+  files = glob.glob("/Users/sarahcernugel/uda-class-notes/calls/*")
 
-q1_23_df = pd.read_table('/Users/sarahcernugel/uda-class-notes/calls/wwe_q1_2023.txt')
-q3_24_df = pd.read_table('/Users/sarahcernugel/uda-class-notes/calls/tko_q3_2024.txt')
-q3_23_df = pd.read_table('/Users/sarahcernugel/uda-class-notes/calls/edr_q3_2023.txt')
-q2_23_df = pd.read_table('/Users/sarahcernugel/uda-class-notes/calls/wwe_q2_2023.txt')
+  data = []
 
-wwe_calls = pd.DataFrame(data, columns=['ticker', 'quarter', 'year'])
+  for file in files:
+    filename = file.split('/')[-1]
+    ticker, quarter, year = filename.split('_')[0], filename.split('_')[1], filename.split('_')[2].split('.')[0]
 
-print(q1_23_df)
-print(q3_24_df)
-print(q3_23_df)
-print(q2_23_df)
+    data_wwe = pd.read_table(file)
 
-wwe_data = []
+    data_wwe['ticker'] = ticker
+    data_wwe['quarter'] = quarter
+    data_wwe['year'] = year
 
-wwe_calls = pd.DataFrame(data, columns=['ticker', 'quarter', 'year'])
+    data.append(data_wwe)
 
-#str.split()
+  df = pd.concat(data, ignore_index=True)
+  return df
 
+check_df = wwe_calls()
+print(check_df)
 ```
 
 ## Step 2
@@ -50,24 +52,54 @@ wwe_calls = pd.DataFrame(data, columns=['ticker', 'quarter', 'year'])
 Use the AlphaVantage api to get daily stock prices for WWE and related tickers for the last 5 years -- pay attention to your data. You cannot use any AlphaVantage packages (i.e., you can only use requests to grab the data). Tell me about the general trend that you are seeing. I don't care which viz package you use, but plotly is solid and plotnine is good for ggplot2 users.
 
 ```{python}
-# API Key WPP4DPSKZ7JJRC9L
 import requests 
-import plotly.express as px 
+import plotly.express as px
+import plotly.io as pio
+import nbformat
 
-url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=IBM&apikey=WPP4DPSKZ7JJRC9L'
+url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=WWE&outputsize=full&apikey=WPP4DPSKZ7JJRC9L'
 r = requests.get(url)
 data = r.json()
 
-print(data)
+tko_url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=TKO&outputsize=full&apikey=WPP4DPSKZ7JJRC9L'
+r2 = requests.get(tko_url)
+tko_data = r2.json()
 
-df = px.data.iris() 
+daily_wwe_data = data['Time Series (Daily)']
+daily_tko_data = tko_data['Time Series (Daily)']
+print(daily_wwe_data)
 
-# plotting the line chart
-fig = px.line(data, x="species", y="petal_width") 
+wwe_stock = pd.DataFrame.from_dict(daily_wwe_data, orient='index')
+wwe_stock.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+wwe_stock.index = pd.to_datetime(wwe_stock.index)
 
-# showing the plot
-fig.show()
+tko_stock = pd.DataFrame.from_dict(daily_tko_data, orient='index')
+tko_stock.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+tko_stock.index = pd.to_datetime(tko_stock.index)
 
+wwe_stock = wwe_stock.astype({'Open': float, 'High': float, 'Low': float, 'Close': float, 'Volume': int})
+tko_stock = tko_stock.astype({'Open': float, 'High': float, 'Low': float, 'Close': float, 'Volume': int})
+
+stock_prices = pd.concat([wwe_stock, tko_stock], keys = ['WWE', 'TKO'], names = ['Ticker'])
+
+print(stock_prices)
+
+#print(combined_data)
+
+#fig = px.line(combined_data, x = combined_data.index, y = ['WWE Close', 'TKO Close'], title = 'WWE Daily Closing Prices (1999-2023)')
+
+#plot_data = combined_data[['WWE Close', 'TKO Close']].reset_index()
+
+#fig = px.line(combined_data, x = 'date', y = ['WWE Close', 'TKO Close'],
+#              title='WWE and TKO Daily Closing Prices (1999-2023)',
+#              labels={'date': 'Date', 'value': 'Closing Price (USD)', 'variable': 'Stock'},
+#              color='variable')
+
+#fig = px.line(wwe_stock, x = wwe_stock.index, y = 'close', title = 'WWE Daily Closing Prices (1999-2023)')
+
+#pio.renderers.default = 'browser'
+
+#fig.show()
 ```
 
 ## Step 3
@@ -75,10 +107,13 @@ fig.show()
 Just like every other nerdy hobby, professional wrestling draws dedicated fans. Wrestling fans often go to cagematch.net to leave reviews for matches, shows, and wrestlers. The following link contains the top 100 matches on cagematch: https://www.cagematch.net/?id=111&view=statistics
 
 * What is the correlation between WON ratings and cagematch ratings?
+  0.2172362283628634
 
 ** Which wrestler has the most matches in the top 100?
+  Kenta Kobashi and Kenny Omega with 15 each
 
-*** Which promotion has the most matches in the top 100? 
+*** Which promotion has the most matches in the top 100?
+
 
 **** What is each promotion's average WON rating?
 
@@ -86,6 +121,89 @@ Just like every other nerdy hobby, professional wrestling draws dedicated fans. 
 
 ```{python}
 from bs4 import BeautifulSoup
+import pandas as pd
+import re
+import requests
+
+url = 'https://www.cagematch.net/?id=111&view=statistics'
+response = requests.get(url)
+soup = BeautifulSoup(response.content, 'html.parser')
+table = soup.find('table')
+
+rows = table.find_all('tr')
+
+table_data = []
+
+for row in rows[1:]:
+    columns = row.find_all(['td', 'th'])
+
+    img_tag = row.find('img')
+    promotion_name = img_tag.get('alt') if img_tag else ''
+
+    columns = [col.get_text(strip=True) for col in columns]
+    columns[2] = promotion_name
+
+    table_data.append(columns)
+
+ranking_data = pd.DataFrame(table_data)
+
+ranking_data.columns = ['#', 'Date', 'Promotion', 'Match fixture', 'WON', 'Match Type', 'Rating', 'Votes']
+
+ranking_data['WON'] = ranking_data['WON'].astype(str)
+
+def count_of_stars(rating):
+    star_count = rating.count('*')
+
+    fraction_match = re.search(r'(\d+)/(\d+)', rating)
+    if fraction_match:
+        numerator = int(fraction_match.group(1))
+        denominator = int(fraction_match.group(2))
+        fraction = numerator / denominator
+        return star_count + fraction
+    else:
+        return star_count
+
+ranking_data['WON'] = ranking_data['WON'].apply(count_of_stars)
+
+print(ranking_data)
+
+correlation = ranking_data['WON'].corr(ranking_data['Rating'])
+
+print(correlation)
+```
+
+```{python}
+from bs4 import BeautifulSoup
+import pandas as pd
+import re
+
+wrestlers = []
+
+for match in ranking_data['Match fixture']:
+ 
+    names = re.split(r'[,&]|\s+vs\.', match)
+    wrestlers.extend([name.strip() for name in names])
+
+name_count = names_series.value_counts()
+
+name_count_df = pd.DataFrame(name_count).reset_index()
+name_count_df.columns = ['Wrestler', 'Count']
+
+name_count_df = name_count_df.sort_values(by='Count', ascending=False).reset_index(drop=True)
+
+print(name_count_df)
+```
+
+```{python}
+
+```
+
+```{python}
+
+```
+
+```{python}
+url = 'https://www.cagematch.net/?id=111&view=statistics'
 
 ```
 
@@ -98,7 +216,21 @@ You can't have matches without wrestlers. The following link contains the top 10
 ***** Of the top 100, which wrestler has the best win/loss?
 
 ```{python}
+url = 'https://www.cagematch.net/?id=2&view=statistics'
+base_url = 'https://www.cagematch.net'
+response = requests.get(url)
+soup = BeautifulSoup(response.content, 'html.parser')
+table = soup.find('table')
+rows = table.find_all('tr')
+table_data = []
 
+for row in table.find_all('tr')[1:]:
+    columns = row.find_all('td')
+    if len(columns) > 1:
+      link_tag = columns[1].find('a')
+      if link_tag and link_tag.get('href'):
+
+    
 ```
 
 ## Step 5
