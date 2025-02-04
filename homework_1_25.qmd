@@ -43,6 +43,7 @@ def wwe_calls():
   df = pd.concat(data, ignore_index=True)
   return df
 
+
 check_df = wwe_calls()
 print(check_df)
 ```
@@ -82,42 +83,37 @@ tko_stock = tko_stock.astype({'Open': float, 'High': float, 'Low': float, 'Close
 
 stock_prices = pd.concat([wwe_stock, tko_stock], keys = ['WWE', 'TKO'], names = ['Ticker'])
 
-print(stock_prices)
+stock_prices_reset = stock_prices.reset_index()
 
-#print(combined_data)
+print(stock_prices_reset)
 
-#fig = px.line(combined_data, x = combined_data.index, y = ['WWE Close', 'TKO Close'], title = 'WWE Daily Closing Prices (1999-2023)')
+fig = px.line(stock_prices_reset, x='level_1', y='Close', color='Ticker',
+              title='WWE and TKO Daily Closing Prices', labels = {'level_1': 'Date', 'Close': 'Closing Price ($)'})
 
-#plot_data = combined_data[['WWE Close', 'TKO Close']].reset_index()
-
-#fig = px.line(combined_data, x = 'date', y = ['WWE Close', 'TKO Close'],
-#              title='WWE and TKO Daily Closing Prices (1999-2023)',
-#              labels={'date': 'Date', 'value': 'Closing Price (USD)', 'variable': 'Stock'},
-#              color='variable')
-
-#fig = px.line(wwe_stock, x = wwe_stock.index, y = 'close', title = 'WWE Daily Closing Prices (1999-2023)')
-
-#pio.renderers.default = 'browser'
-
-#fig.show()
+fig.show()
 ```
+
+The general trend shows that WWE's stock has stayed relatively stable with some fluctuations from 2000-2017. In 2018, the stock had a big spike before it started to fall again in late 2019 and early 2020. In 2021 the stock started and upward rise again reaching its peak in August 2023 before it merged with UFC and formed TKO Holding Group. TKO saw the stock fall after the aquisition but since December 2023, it has been on the rise and the highest the stock price has been. The past 5 years has been an overall positive trend.
+
 
 ## Step 3
 
 Just like every other nerdy hobby, professional wrestling draws dedicated fans. Wrestling fans often go to cagematch.net to leave reviews for matches, shows, and wrestlers. The following link contains the top 100 matches on cagematch: https://www.cagematch.net/?id=111&view=statistics
 
 * What is the correlation between WON ratings and cagematch ratings?
-  0.2172362283628634
+  0.35132323865117493
 
 ** Which wrestler has the most matches in the top 100?
   Kenta Kobashi and Kenny Omega with 15 each
 
 *** Which promotion has the most matches in the top 100?
-
+  New Japan Pro Wrestling with 34 matches
 
 **** What is each promotion's average WON rating?
+  All Elite Wrestling with a WON rating of 5.562500
 
 ***** Select any single match and get the comments and ratings for that match into a data frame.
+  Kenny Omega vs. Will Ospreay has 1373 rows of ratings and comments.
 
 ```{python}
 from bs4 import BeautifulSoup
@@ -152,6 +148,9 @@ ranking_data.columns = ['#', 'Date', 'Promotion', 'Match fixture', 'WON', 'Match
 ranking_data['WON'] = ranking_data['WON'].astype(str)
 
 def count_of_stars(rating):
+    if '*' not in rating:
+        return 'None'
+
     star_count = rating.count('*')
 
     fraction_match = re.search(r'(\d+)/(\d+)', rating)
@@ -164,6 +163,8 @@ def count_of_stars(rating):
         return star_count
 
 ranking_data['WON'] = ranking_data['WON'].apply(count_of_stars)
+
+ranking_data['WON'] = pd.to_numeric(ranking_data['WON'], errors='coerce')
 
 print(ranking_data)
 
@@ -184,6 +185,7 @@ for match in ranking_data['Match fixture']:
     names = re.split(r'[,&]|\s+vs\.', match)
     wrestlers.extend([name.strip() for name in names])
 
+names_series = pd.Series(wrestlers)
 name_count = names_series.value_counts()
 
 name_count_df = pd.DataFrame(name_count).reset_index()
@@ -195,16 +197,57 @@ print(name_count_df)
 ```
 
 ```{python}
+promotion_counts = ranking_data['Promotion'].value_counts()
 
+print(promotion_counts)
 ```
 
 ```{python}
+import pandas as pd
 
+won_avg = ranking_data.groupby('Promotion')['WON'].mean()
+
+won_avg_ordered = won_avg.sort_values(ascending=False)
+
+print(won_avg_ordered)
 ```
 
 ```{python}
-url = 'https://www.cagematch.net/?id=111&view=statistics'
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
 
+main_page_url = 'https://www.cagematch.net/?id=111&nr=66018'
+response = requests.get(main_page_url)
+soup = BeautifulSoup(response.content, 'html.parser')
+
+ratings_link = soup.find('a', href=True, text='Ratings')
+ratings_url = 'https://www.cagematch.net' + ratings_link['href']
+
+ratings = []
+comments = []
+
+for s in range(0, 1373, 100):
+    url = f'{ratings_url}&s={s}'
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    
+    table = soup.find('table', {'class': 'TBase TableBorderColor'})
+    rows = table.find_all('tr')[1:]
+    for row in rows:
+        columns = row.find_all('td')
+            
+        rating = columns[3].get_text(strip=True)
+        comment = columns[4].get_text(strip=True)
+
+        ratings.append(rating)
+        comments.append(comment)
+
+ratings_data = pd.DataFrame({
+    'Rating': ratings,
+    'Comment': comments})
+
+print(ratings_data)
 ```
 
 ## Step 4
@@ -212,25 +255,100 @@ url = 'https://www.cagematch.net/?id=111&view=statistics'
 You can't have matches without wrestlers. The following link contains the top 100 wrestlers, according to cagematch: https://www.cagematch.net/?id=2&view=statistics
 
 *** Of the top 100, who has wrestled the most matches?
+    Ric Flair with 4999 matches
 
 ***** Of the top 100, which wrestler has the best win/loss?
+    Gene Okerlund has never lost and Lou Thesz is second with 9.45
 
 ```{python}
-url = 'https://www.cagematch.net/?id=2&view=statistics'
-base_url = 'https://www.cagematch.net'
-response = requests.get(url)
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+main_page_url = 'https://www.cagematch.net/?id=2&view=statistics'
+response = requests.get(main_page_url)
 soup = BeautifulSoup(response.content, 'html.parser')
-table = soup.find('table')
-rows = table.find_all('tr')
-table_data = []
 
-for row in table.find_all('tr')[1:]:
-    columns = row.find_all('td')
-    if len(columns) > 1:
-      link_tag = columns[1].find('a')
-      if link_tag and link_tag.get('href'):
+table = soup.find('table', {'class': 'TBase TableBorderColor'})
 
+if not table:
+    print("Error: Table not found!")
+else:
+    wrestlers = []
+    for row in table.find_all('tr')[1:]:
+        columns = row.find_all('td')
+        
+        if len(columns) > 1:
+            name_tag = columns[1].find('a', href=True)
+            if name_tag:
+                name = name_tag.get_text(strip=True)
+                wrestler_url = 'https://www.cagematch.net' + name_tag['href']
+                wrestlers.append((name, wrestler_url))
+
+    wrestler_df = pd.DataFrame(wrestlers, columns=["Wrestler Name", "Profile Link"])
+
+match_stats_data = []
+
+for index, row in wrestler_df.iterrows():
+    wrestler_url = row['Profile Link']
+    response = requests.get(wrestler_url)
+    soup = BeautifulSoup(response.content, 'html.parser')
     
+    match_stats_link = soup.find('a', href=True, text='Match Statistics')
+    
+    if match_stats_link:
+        # Construct the full URL for the Match Statistics page
+        match_stats_url = 'https://www.cagematch.net' + match_stats_link['href']
+        
+        # Send GET request to the Match Statistics page
+        stats_response = requests.get(match_stats_url)
+        
+        # Parse the Match Statistics page
+        stats_soup = BeautifulSoup(stats_response.content, 'html.parser')
+        
+        # Extract the total number of matches (you can adjust this based on actual data on the page)
+        match_info = stats_soup.find('div', class_='InformationBoxTable')
+        
+        if match_info:
+            total_matches = match_info.find('div', string='Total number of matches:').find_next('div').get_text(strip=True)
+            total_wins = match_info.find('div', string='Total number of wins:').find_next('div').get_text(strip=True)
+            total_losses = match_info.find('div', string='Total number of losses:').find_next('div').get_text(strip=True)
+            total_draws = match_info.find('div', string='Total number of draws:').find_next('div').get_text(strip=True)
+            
+            # Append the data to the list
+            match_stats_data.append({
+                'Wrestler': row['Wrestler Name'],
+                'Total Matches': total_matches,
+                'Total Wins': total_wins,
+                'Total Losses': total_losses,
+                'Total Draws': total_draws
+            })
+
+match_stats_df = pd.DataFrame(match_stats_data)
+
+#print(match_stats_df)
+match_stats_df['Total Matches'] = pd.to_numeric(match_stats_df['Total Matches'], errors='coerce')
+match_stats_df_sorted = match_stats_df.sort_values(by='Total Matches', ascending=False).reset_index(drop=True)
+
+# Print the sorted DataFrame
+print(match_stats_df_sorted)
+```
+
+```{python}
+match_stats_df['Total Wins'] = match_stats_df['Total Wins'].astype(str)
+match_stats_df['Total Losses'] = match_stats_df['Total Losses'].astype(str)
+
+# Extract the numbers from the 'Total Wins' and 'Total Losses' columns
+match_stats_df['Total Wins'] = match_stats_df['Total Wins'].str.extract(r'(\d+)').astype(int)
+match_stats_df['Total Losses'] = match_stats_df['Total Losses'].str.extract(r'(\d+)').astype(int)
+
+# Create the 'win_loss' column by dividing Total Wins by Total Losses
+match_stats_df['win_loss'] = match_stats_df['Total Wins'] / match_stats_df['Total Losses']
+
+match_stats_df_sorted = match_stats_df.sort_values(by='win_loss', ascending=False).reset_index(drop=True)
+
+# Print the updated DataFrame
+print(match_stats_df_sorted)
 ```
 
 ## Step 5
@@ -242,3 +360,9 @@ First, what talent should WWE pursue? Advise carefully.
 Second, reconcile what you found in steps 3 and 4 with Netflix's relationship with WWE. Use the data from the following page to help make your case: https://wrestlenomics.com/tv-ratings/
 
 Third, do you have any further recommendations for WWE?
+
+The WWE should pursue winners who the fans enjoy watching. They are in the entertainment industry so giving the fans what they want is crucial. One talent they should get is Kenny Omega. He has the most matches in the top 100, signalling that he is a joy to watch. Another great wrestler is Kenta Kobashi, but he is retired. They should look for the next rising star that could have the same impact as him. They should look closely at New Japan Pro Wrestling to see the talent they have there since those matches have the highest average WON rating. The current top winners are retired or dead so it would be good to find a current wrestler who could be dominant.
+
+WWE Smackdown is the most watched event, however veiwership has gone down. The downward trend started when it moved from Fox to USA. WWE should look at going back to Fox or another big network to get more veiwers and increase awareness of their product. WWE NXT has improved their veiwership and that was when they switched from USA to CW. A common theme seems to be that USA does not have the same reach and positive impact that other networks have. If WWE can get on big networks with likeable start, they can increase their ratings.
+
+One last recommendation is to look at the model that New Japan Pro Wrestling and All Elite Wrestling use. They seem to consistenly have good matches and ratings and that keep the fans engaged. They should also monitor how moving to streaming platforms like Netflix and Max impacts their veiwership and ratings. It requires memberships which could keep people away and also can sometimes glitch when too many people are watching. If it does help, they should continue with those partnerships, but if not, they should look at other options.
