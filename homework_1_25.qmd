@@ -45,7 +45,7 @@ def wwe_calls():
 
 
 check_df = wwe_calls()
-print(check_df)
+print(check_df.head())
 ```
 
 ## Step 2
@@ -68,7 +68,7 @@ tko_data = r2.json()
 
 daily_wwe_data = data['Time Series (Daily)']
 daily_tko_data = tko_data['Time Series (Daily)']
-print(daily_wwe_data)
+#print(daily_wwe_data)
 
 wwe_stock = pd.DataFrame.from_dict(daily_wwe_data, orient='index')
 wwe_stock.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
@@ -85,7 +85,7 @@ stock_prices = pd.concat([wwe_stock, tko_stock], keys = ['WWE', 'TKO'], names = 
 
 stock_prices_reset = stock_prices.reset_index()
 
-print(stock_prices_reset)
+print(stock_prices_reset.head())
 
 fig = px.line(stock_prices_reset, x='level_1', y='Close', color='Ticker',
               title='WWE and TKO Daily Closing Prices', labels = {'level_1': 'Date', 'Close': 'Closing Price ($)'})
@@ -104,10 +104,10 @@ Just like every other nerdy hobby, professional wrestling draws dedicated fans. 
   0.35132323865117493
 
 ** Which wrestler has the most matches in the top 100?
-  Kenta Kobashi and Kenny Omega with 15 each
+  Kenny Omega with 16
 
 *** Which promotion has the most matches in the top 100?
-  New Japan Pro Wrestling with 34 matches
+  New Japan Pro Wrestling with 35 matches
 
 **** What is each promotion's average WON rating?
   All Elite Wrestling with a WON rating of 5.562500
@@ -166,7 +166,7 @@ ranking_data['WON'] = ranking_data['WON'].apply(count_of_stars)
 
 ranking_data['WON'] = pd.to_numeric(ranking_data['WON'], errors='coerce')
 
-print(ranking_data)
+print(ranking_data.head())
 
 correlation = ranking_data['WON'].corr(ranking_data['Rating'])
 
@@ -193,13 +193,13 @@ name_count_df.columns = ['Wrestler', 'Count']
 
 name_count_df = name_count_df.sort_values(by='Count', ascending=False).reset_index(drop=True)
 
-print(name_count_df)
+print(name_count_df.head())
 ```
 
 ```{python}
 promotion_counts = ranking_data['Promotion'].value_counts()
 
-print(promotion_counts)
+print(promotion_counts.head())
 ```
 
 ```{python}
@@ -209,7 +209,7 @@ won_avg = ranking_data.groupby('Promotion')['WON'].mean()
 
 won_avg_ordered = won_avg.sort_values(ascending=False)
 
-print(won_avg_ordered)
+print(won_avg_ordered.head())
 ```
 
 ```{python}
@@ -221,7 +221,7 @@ main_page_url = 'https://www.cagematch.net/?id=111&nr=66018'
 response = requests.get(main_page_url)
 soup = BeautifulSoup(response.content, 'html.parser')
 
-ratings_link = soup.find('a', href=True, text='Ratings')
+ratings_link = soup.find('a', href=True, string='Ratings')
 ratings_url = 'https://www.cagematch.net' + ratings_link['href']
 
 ratings = []
@@ -247,7 +247,7 @@ ratings_data = pd.DataFrame({
     'Rating': ratings,
     'Comment': comments})
 
-print(ratings_data)
+print(ratings_data.head())
 ```
 
 ## Step 4
@@ -294,19 +294,13 @@ for index, row in wrestler_df.iterrows():
     response = requests.get(wrestler_url)
     soup = BeautifulSoup(response.content, 'html.parser')
     
-    match_stats_link = soup.find('a', href=True, text='Match Statistics')
+    match_stats_link = soup.find('a', href=True, string='Match Statistics')
     
     if match_stats_link:
-        # Construct the full URL for the Match Statistics page
         match_stats_url = 'https://www.cagematch.net' + match_stats_link['href']
-        
-        # Send GET request to the Match Statistics page
         stats_response = requests.get(match_stats_url)
-        
-        # Parse the Match Statistics page
         stats_soup = BeautifulSoup(stats_response.content, 'html.parser')
         
-        # Extract the total number of matches (you can adjust this based on actual data on the page)
         match_info = stats_soup.find('div', class_='InformationBoxTable')
         
         if match_info:
@@ -315,7 +309,6 @@ for index, row in wrestler_df.iterrows():
             total_losses = match_info.find('div', string='Total number of losses:').find_next('div').get_text(strip=True)
             total_draws = match_info.find('div', string='Total number of draws:').find_next('div').get_text(strip=True)
             
-            # Append the data to the list
             match_stats_data.append({
                 'Wrestler': row['Wrestler Name'],
                 'Total Matches': total_matches,
@@ -326,29 +319,24 @@ for index, row in wrestler_df.iterrows():
 
 match_stats_df = pd.DataFrame(match_stats_data)
 
-#print(match_stats_df)
 match_stats_df['Total Matches'] = pd.to_numeric(match_stats_df['Total Matches'], errors='coerce')
 match_stats_df_sorted = match_stats_df.sort_values(by='Total Matches', ascending=False).reset_index(drop=True)
 
-# Print the sorted DataFrame
-print(match_stats_df_sorted)
+print(match_stats_df_sorted.head())
 ```
 
 ```{python}
 match_stats_df['Total Wins'] = match_stats_df['Total Wins'].astype(str)
 match_stats_df['Total Losses'] = match_stats_df['Total Losses'].astype(str)
 
-# Extract the numbers from the 'Total Wins' and 'Total Losses' columns
 match_stats_df['Total Wins'] = match_stats_df['Total Wins'].str.extract(r'(\d+)').astype(int)
 match_stats_df['Total Losses'] = match_stats_df['Total Losses'].str.extract(r'(\d+)').astype(int)
 
-# Create the 'win_loss' column by dividing Total Wins by Total Losses
 match_stats_df['win_loss'] = match_stats_df['Total Wins'] / match_stats_df['Total Losses']
 
 match_stats_df_sorted = match_stats_df.sort_values(by='win_loss', ascending=False).reset_index(drop=True)
 
-# Print the updated DataFrame
-print(match_stats_df_sorted)
+print(match_stats_df_sorted.head())
 ```
 
 ## Step 5
