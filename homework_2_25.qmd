@@ -1,0 +1,184 @@
+---
+title: "Homework 2"
+author: "Sarah Cernugel"
+format:
+  html:
+    toc: true
+    toc-location: left
+    self-contained: true
+jupyter: python3
+---
+
+## Task 1
+
+We are going to return to the table of the top 100 wrestlers: https://www.cagematch.net/?id=2&view=statistics. Specifically, you are going to get the ratings/comments tables for each wrestler.
+
+```{python}
+from bertopic import BERTopic
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+# Create a dataframe with the wrestler names and their profile URLs
+main_page_url = 'https://www.cagematch.net/?id=2&view=statistics'
+response = requests.get(main_page_url)
+soup = BeautifulSoup(response.content, 'html.parser')
+
+wrestler_links = soup.find_all('a', href=True)
+
+wrestler_urls = []
+
+for link in wrestler_links:
+    href = link['href']
+    if '?id=2&nr=' in href:
+        wrestler_name = link['href'].split('gimmick=')[1].replace('+', ' ')
+        full_url = f'https://www.cagematch.net{href}'
+        wrestler_urls.append([wrestler_name, full_url])
+
+wrestler_df = pd.DataFrame(wrestler_urls, columns=['Wrestler Name', 'URL'])
+
+# Replace &gimmick=name with &page=99
+def modify_url(url):
+    if '&gimmick=' in url:
+        base_url = url.split('&gimmick=')[0]
+        return base_url + '&page=99'
+    return url
+
+wrestler_df['Comments URL'] = wrestler_df['URL'].apply(modify_url)
+
+print(wrestler_df.head())
+```
+
+```{python}
+import re
+
+all_comments = []
+
+for index, row in wrestler_df.iterrows():
+    comment_link = row["Comments URL"]
+    
+    if pd.notna(comment_link):
+        page = requests.get(comment_link)
+        soup = BeautifulSoup(page.content, "html.parser")
+        
+        comment_elements = soup.find_all("div", class_="CommentContents")
+
+    for comment in comment_elements:
+        comment_text = comment.get_text(strip=True)
+        all_comments.append({
+            "Wrestler Name": row["Wrestler Name"],
+            "Original Link": row["URL"],
+            "Comments Link": comment_link,
+            "Comment": comment_text})
+
+comments_df2 = pd.DataFrame(all_comments)
+
+def split_rating_comment(text):
+    match = re.match(r"\[(\d+\.\d+)\]\s*(.*)", str(text))
+    if match:
+        return match.group(1), match.group(2)
+
+comments_df2[['Rating', 'Comments']] = comments_df2['Comment'].apply(lambda x: pd.Series(split_rating_comment(x)))
+comments_df2['Rating'] = pd.to_numeric(comments_df2['Rating'], errors='coerce')
+comments_df2 = comments_df2.drop(columns=['Comment'])
+comments_df2['Comments'] = comments_df2['Comments'].str.strip('"')
+```
+
+```{python}
+from langdetect import detect, lang_detect_exception
+from langdetect import detect, LangDetectException
+
+# Function to check if a comment is English
+def filter_english_comments(column):
+    try:
+        return detect(column) == 'en'
+    except (lang_detect_exception.LangDetectException, TypeError):
+        return False
+
+comments_df2["English Comments"] = comments_df2["Comments"].apply(filter_english_comments)
+
+df_comments2 = comments_df2[comments_df2["English Comments"]]
+df_comments2 = df_comments2.drop(columns=["English Comments"])
+
+print(df_comments2.head())
+```
+
+## Task 2
+
+Perform any form of sentiment analysis. What is the relationship between a reviewer's sentiment and their rating?
+
+```{python}
+import nltk
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+
+# Download the NLTK stopwords data (only once)
+nltk.download('punkt')
+nltk.download('stopwords')
+
+# Function to remove stopwords
+def remove_stopwords(text):
+    words = word_tokenize(text)
+    
+    stop_words = set(stopwords.words('english'))
+
+    filtered_words = [word for word in words if word.lower() not in stop_words]
+    
+    return ' '.join(filtered_words)
+
+df_comments2["Cleaned Comments"] = df_comments2["Comments"].apply(remove_stopwords)
+print(df_comments2.head())
+```
+
+```{python}
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+vader = SentimentIntensityAnalyzer()
+
+#Calculate the sentiment of comments
+def get_compound_score(comment):
+    return vader.polarity_scores(comment).get('compound')
+
+df_comments2["Sentiment"] = df_comments2["Cleaned Comments"].apply(get_compound_score)
+
+print(df_comments2[['Cleaned Comments', 'Sentiment']].head())
+```
+
+```{python}
+# Calculate the correlation for the data
+correlation = df_comments2['Rating'].corr(df_comments2['Sentiment'])
+print(correlation)
+```
+
+There is a slight positive correlation of 0.245 between the rating and sentiments of comments in the dataset. As the rating increases, the sentiment also likely will increase.
+
+## Task 3
+
+Perform any type of topic modeling on the comments. What are the main topics of the comments? How can you use those topics to understand what people value?
+
+```{python}
+from sklearn.feature_extraction.text import TfidfTransformer
+from bertopic.vectorizers import ClassTfidfTransformer
+from joblib import load, dump
+import pandas as pd
+
+df_comments2 = df_comments2.dropna(subset=["Comments"])
+
+ctfidf_model = ClassTfidfTransformer(
+  reduce_frequent_words=True)
+
+topic_model = BERTopic(ctfidf_model=ctfidf_model)
+
+topics, probs = topic_model.fit_transform(df_comments2["Comments"].to_list())
+
+dump(
+  [topic_model, topics, probs], 
+  '/Users/sarahcernugel/uda-class-notes/topic_model.joblib')
+
+topic_model.get_topic_info().head()
+print(topic_model.get_topic_info())
+```
+
+The word "dangerously" is seen a couple times in the output of the topic modeling. The words punks, undertaker, and deadman are also seen. To me this means the main topics are about violence and that is what the viewers value the most. They are excited by the dangers involved in the fights and the powerful nicknames given to the wrestlers.
